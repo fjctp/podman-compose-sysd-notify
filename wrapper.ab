@@ -1,0 +1,40 @@
+
+import { len } from "std/text"
+import { get_env_var, exit } from "std/env"
+
+pub fun is_pod_running(pod_name) {
+    silent $ podman pod ps --filter name={pod_name} --format "\{\{.Status}}" | 
+        grep -i running $ failed {
+        return false
+    }
+    silent $ podman pod ps --filter name={pod_name} --format "\{\{.Status}}" | 
+        grep -i degraded $ failed {
+        return true
+    }
+    return false
+}
+
+main(args) {
+    let sleep_sec = 10
+    let pod_name = "pod_" + $ basename {{get_env_var("PWD")}} $ ?
+    
+    // Start pod
+    $ bash -c "podman-compose up -d" $ ?
+
+    // Not
+    let msg = "{{pod_name}} is ready"
+    echo msg
+    $ systemd-notify --ready --status "{msg}" $ ?
+    $ sleep {sleep_sec} $ ?
+
+    loop {
+        if is_pod_running(pod_name) {
+            echo "Working!!"
+            $ systemd-notify WATCHDOG=1 --status "{pod_name} is normal" $ ?
+        }
+        else {
+            echo "Not Working!!"
+        }
+        $ sleep {sleep_sec} $ ?
+    }
+}
